@@ -6,7 +6,7 @@ const graph = new Map();
 (function walk(id) { if (graph.has(id)) return; const src = fs.readFileSync(path.join(js, id), 'utf8'); graph.set(id, src); for (const m of src.matchAll(IMP)) walk(norm(id, m[2])); })('app.js');
 function transform(id, src) {
   const names = [];
-  src = src.replace(IMP, (_, what, spec) => `const ${what.replace(/\s+as\s+/g, ': ')} = __r(${JSON.stringify(norm(id, spec))});`);
+  src = src.replace(IMP, (_, what, spec) => `const ${what.startsWith('* as ') ? what.slice(5) : what.replace(/\s+as\s+/g, ': ')} = __r(${JSON.stringify(norm(id, spec))});`);
   src = src.replace(/^export\s+((?:async\s+)?function\*?|const|let|class)\s+([A-Za-z0-9_$]+)/gm, (_, kind, name) => { names.push(name); return kind + ' ' + name; });
   if (/^export\s+(default|\{)/m.test(src)) throw new Error('unsupported export in ' + id);
   return `${JSON.stringify(id)}:function(exports,__r){"use strict";\n${src}\n${names.map(n => `exports.${n}=${n};`).join('')}}`;

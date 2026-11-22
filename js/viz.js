@@ -8,7 +8,7 @@ const PAL = {
   light: { base: [[226, 218, 255], [255, 214, 204]], rain: [[216, 228, 252], [170, 198, 236]], water: [[210, 236, 250], [150, 206, 232]], fire: [[255, 236, 222], [255, 188, 140]], wind: [[228, 232, 252], [190, 200, 238]], forest: [[224, 244, 230], [170, 214, 182]], night: [[228, 224, 255], [196, 182, 244]], space: [[234, 224, 255], [204, 170, 244]], machine: [[238, 234, 246], [206, 200, 226]] },
 };
 export function createViz(canvas, getLevel, reduced) {
-  const g = canvas.getContext('2d'); let W = 0, H = 0, dpr = 1, w = {}, tw = {}, last = 0, flash = 0, bassAvg = 0, light = false, running = false, t0 = 0;
+  const g = canvas.getContext('2d'); let W = 0, H = 0, dpr = 1, w = {}, tw = {}, last = 0, flash = 0, bassAvg = 0, light = false, running = false, t0 = 0, tn = [0, 0, 0, 0], tt = [0, 0, 0, 0];
   KEYS.forEach(k => (w[k] = tw[k] = 0)); const drops = [], rings = [], embers = [], fogs = [], stars = [];
   const resize = () => { dpr = Math.min(window.devicePixelRatio || 1, 1.5); W = innerWidth; H = innerHeight; canvas.width = W * dpr; canvas.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0); };
   addEventListener('resize', resize); resize();
@@ -20,6 +20,8 @@ export function createViz(canvas, getLevel, reduced) {
     for (const k of KEYS) w[k] += (tw[k] - w[k]) * Math.min(1, dt * 1.5);
     bassAvg += (L.bass - bassAvg) * dt * 2; if (L.bass - bassAvg > 0.16 && w.rain > 0.3 && !reduced) flash = Math.min(1, flash + 0.5);
     const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, mix('t', 0)); gr.addColorStop(1, mix('b', 1)); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 4; i++) tn[i] += (tt[i] - tn[i]) * Math.min(1, dt * 0.9); // focus phase: calm cool wash; break: warm wash (eased over ~3 s)
+    if (tn[3] > 0.004) { g.fillStyle = `rgba(${tn[0] | 0},${tn[1] | 0},${tn[2] | 0},${tn[3]})`; g.fillRect(0, 0, W, H); }
     const lv = 0.55 + L.lvl * 1.2, ink = light ? '70,84,150' : '190,210,255';
     { // orb (moon / sun) and three ridges
       const warm = Math.min(1, w.fire * 1.3), ox = W * (W < 700 ? 0.84 : 0.8), oy = H * (W < 700 ? 0.085 : 0.2), or = Math.min(W, H) * 0.34, c = light ? [255, 190 + 40 * (1 - warm) | 0, 150 + 70 * (1 - warm) | 0] : [225 + 30 * warm | 0, 220 - 50 * warm | 0, 255 - 130 * warm | 0], bre = 1 + 0.05 * Math.sin(ts / 2600) + L.bass * 0.15;
@@ -49,6 +51,7 @@ export function createViz(canvas, getLevel, reduced) {
     set(items, isLight) { // items: [{id, v}] of playing sounds
       light = isLight; const nw = {}; KEYS.forEach(k => (nw[k] = 0)); for (const it of items) { const m = VIZ[it.id]; if (m) m.forEach((x, i) => { nw[KEYS[i]] += x * it.v / 100; }); } KEYS.forEach(k => (tw[k] = Math.min(1, nw[k]))); if (!running) frame(performance.now());
     },
+    tone(phase) { const c = { focus: light ? [96, 150, 235, 0.3] : [34, 96, 190, 0.3], break: light ? [255, 160, 110, 0.34] : [255, 128, 70, 0.22] }[phase]; if (c) { if (tt[3] === 0) tn.splice(0, 3, c[0], c[1], c[2]); tt = c.slice(); } else tt[3] = 0; if (!running) frame(performance.now()); },
     start() { if (!running) { running = true; requestAnimationFrame(frame); } }, stop() { running = false; }, frame: () => frame(performance.now()),
   };
 }
