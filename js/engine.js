@@ -47,10 +47,14 @@ export class Engine {
   setVol(id, v, tc = 0.05) { const e = this.voices.get(id); if (e) e.vg.gain.setTargetAtTime(volGain(v), this.ctx.currentTime, tc); }
   setChar(id, c) { const e = this.voices.get(id); if (e) e.voice.setChar(c); }
   // Fade the whole mix from one gain to another starting `delay` s from now (sleep timer fade-out, fade-in on play).
-  ramp(from, to, delay, dur) {
-    if (!this.ctx) return; const n = this.ctx.currentTime, g = this.fade.gain; (this.fades || (this.fades = [])).push({ from, to, delay, dur }); g.cancelScheduledValues(n); g.setValueAtTime(from, n);
-    if (delay > 0) g.setValueAtTime(from, n + delay);
-    g.setValueCurveAtTime(Float32Array.from({ length: 64 }, (_, i) => from + (to - from) * (0.5 - 0.5 * Math.cos(Math.PI * i / 63))), n + delay + 0.001, Math.max(dur, 0.1));
+  ramp(from, to, delay, dur) { this.rampSeq(from, [{ to, at: delay, dur }]); }
+  // Several cosine segments on the fade gain in order (e.g. fade back in, then fade out at the end of a focus block): one cancel, no overlaps.
+  rampSeq(from, steps) {
+    if (!this.ctx) return; const n = this.ctx.currentTime, g = this.fade.gain; g.cancelScheduledValues(n); g.setValueAtTime(from, n); let cur = from, free = 0; const log = this.fades || (this.fades = []);
+    for (const s of steps) {
+      const at = Math.max(s.at, free), dur = Math.max(s.dur, 0.1), a = cur; log.push({ from: a, to: s.to, delay: at, dur }); if (at > 0) g.setValueAtTime(a, n + at);
+      g.setValueCurveAtTime(Float32Array.from({ length: 64 }, (_, i) => a + (s.to - a) * (0.5 - 0.5 * Math.cos(Math.PI * i / 63))), n + at + 0.001, dur); cur = s.to; free = at + dur + 0.003;
+    }
   }
   // Soft chime `delay` s from now (audio clock). Wakes a suspended context; skipped until the first user gesture has created one.
   chime(delay, vol, kind) {

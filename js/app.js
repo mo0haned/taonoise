@@ -1,13 +1,14 @@
 import { GROUPS, SOUNDS, BY_ID, PRESETS } from './catalog.js';
 import { Engine } from './engine.js';
 import { createViz } from './viz.js';
+import { createFocus, focusMarkup } from './focus.js';
 import { cleanMix, encodeMix, decodeMix, summary, surprise, timerGain, fadeSecFor, fmtClock } from './mix.js';
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const store = { get(k, d) { try { const v = localStorage.getItem('taonoise.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('taonoise.' + k, JSON.stringify(v)); } catch (e) {} } };
 const ic = (n, c = '') => `<svg class="ic ${c}" viewBox="0 0 24 24" aria-hidden="true"><use href="#${n}"/></svg>`;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const engine = new Engine();
-const st = { on: new Set(), vol: {}, chr: {}, master: 80, muted: false, playing: false, name: '', end: 0, totalMin: 0, filter: 'all', fadeIn: false, wake: false };
+const st = { on: new Set(), vol: {}, chr: {}, master: 80, muted: false, playing: false, name: '', end: 0, totalMin: 0, filter: 'all', fadeIn: false, wake: false, fwake: false };
 SOUNDS.forEach(s => { st.vol[s.id] = s.dv; st.chr[s.id] = s.dc; });
 const GH = 'https://github.com/mo0haned/taonoise';
 
@@ -25,7 +26,7 @@ $('#app').innerHTML = `
 <div class="deck-main"><button class="bigplay" id="play" type="button" aria-label="Play">${ic('i-play', 'p')}${ic('i-pause', 'q')}</button>
 <div class="now"><h2 id="nowt" aria-live="polite">Pick a sound to begin</h2><div class="chips" id="chips"></div></div></div>
 <div class="ctl"><div class="mv"><button class="ib" id="mute" type="button" aria-label="Mute" aria-pressed="false">${ic('i-vol', 'v')}${ic('i-mute', 'm')}</button><label class="sl"><span class="sr">Master volume</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume"></label></div>
-<div class="acts"><button class="btn" id="timer" type="button">${ic('i-timer')}<span id="timerl">Sleep timer</span></button><button class="btn" id="rnd" type="button">${ic('i-shuffle')}<span>Surprise me</span></button><button class="btn" id="saved" type="button">${ic('i-save')}<span>Save &amp; mixes</span></button><button class="btn" id="share" type="button">${ic('i-share')}<span>Share link</span></button></div></div>
+<div class="acts"><button class="btn" id="timer" type="button">${ic('i-timer')}<span id="timerl">Sleep timer</span></button><button class="btn" id="focus" type="button">${ic('i-focus')}<span id="focusl">Focus</span></button><button class="btn" id="rnd" type="button">${ic('i-shuffle')}<span>Surprise me</span></button><button class="btn" id="saved" type="button">${ic('i-save')}<span>Save &amp; mixes</span></button><button class="btn" id="share" type="button">${ic('i-share')}<span>Share link</span></button></div></div>
 </section>
 <section class="presets" aria-label="Presets"><h2>Start from a scene</h2><div class="prow" id="prow">${PRESETS.map((p, i) => `<button class="pre" type="button" data-i="${i}">${esc(p.name)}</button>`).join('')}</div></section>
 <section aria-label="Sounds"><div class="tabs" id="tabs"><button type="button" class="tab" data-f="all" aria-pressed="true">${ic('i-all')}All<span class="n">${SOUNDS.length}</span></button>${GROUPS.map(g => `<button type="button" class="tab" data-f="${g.id}" aria-pressed="false" style="--h:${g.hue}">${ic('g-' + g.id)}${g.name}</button>`).join('')}</div>
@@ -33,9 +34,10 @@ $('#app').innerHTML = `
 </div>
 <section id="privacy" hidden><a class="back" href="#/">${ic('i-back')}Back to the mixer</a><article class="doc"><h1>Privacy and policy</h1>
 <p>TaoNoise is a static page. It has no server of its own, no account, no analytics and no third-party scripts, fonts or trackers. Nothing you do here is sent anywhere.</p>
-<h2>What is stored on your device</h2><ul><li><strong>Your last mix and settings</strong> (which sounds, volumes, master volume, theme, timer options) in this browser's local storage, so the page reopens as you left it.</li><li><strong>Mixes you save</strong>, in local storage, under a name you choose.</li><li><strong>An offline copy of the app</strong> (the page and its icons) in the browser cache, so it opens without a network.</li></ul>
+<h2>What is stored on your device</h2><ul><li><strong>Your last mix and settings</strong> (which sounds, volumes, master volume, theme, timer options) in this browser's local storage, so the page reopens as you left it.</li><li><strong>Focus timer</strong> (settings, which phase is running and when it ends so it can resume after a reload, today's finished blocks, a 7-day history and the task labels you type), also in local storage. The Clear history button in the Focus panel erases the counts.</li><li><strong>Mixes you save</strong>, in local storage, under a name you choose.</li><li><strong>An offline copy of the app</strong> (the page and its icons) in the browser cache, so it opens without a network.</li></ul>
 <p>Clear this site's data in your browser settings and all of it is gone. You can also delete saved mixes inside the app.</p>
 <h2>What is not collected</h2><ul><li>No cookies, no accounts, no analytics, no logs of what you play.</li><li>No audio files are downloaded: every sound is generated on your device by your browser's Web Audio engine.</li><li>No microphone or camera access.</li></ul>
+<h2>Focus alerts</h2><p>The optional notification is created by your browser on your device, never by a server, and only while the page is open. The chime is synthesized like every other sound. The remaining time in the tab title and in the lock-screen media controls is shown by your own browser and goes nowhere.</p>
 <h2>Share links</h2><p>A share link keeps the mix inside the part of the address after the <code>#</code>. Browsers never send that part to a server. Whoever opens the link gets the same mix.</p>
 <h2>Hosting</h2><p>The site is hosted as static files on Bittensor SN24 via ms.computer, which serves the page like any web host (it can see the request for the page, as every host can). The code is open source and MIT licensed at <a href="${GH}" target="_blank" rel="noopener">github.com/mo0haned/taonoise</a>.</p></article></section>
 <footer class="foot"><ul class="pills"><li>${ic('i-nodl')}No downloads</li><li>${ic('i-noacct')}No account</li><li>${ic('i-offline')}Works offline</li></ul>
@@ -46,9 +48,10 @@ $('#app').innerHTML = `
 <div class="mini" id="mini" aria-hidden="true"><button class="ib mplay" id="mplay" type="button" aria-label="Play" tabindex="-1">${ic('i-play', 'p')}${ic('i-pause', 'q')}</button><div class="mt"><b id="mnow">TaoNoise</b><span id="mtime"></span></div><button class="ib" id="mmute" type="button" aria-label="Mute" tabindex="-1">${ic('i-vol', 'v')}${ic('i-mute', 'm')}</button><label class="sl msl"><span class="sr">Master volume</span><input type="range" id="mmaster" min="0" max="100" value="80" aria-label="Master volume" tabindex="-1"></label></div>
 <dialog id="dtimer" aria-labelledby="dtt"><div class="sheet"><div class="sh"><h2 id="dtt">Sleep timer</h2><button class="ib" data-close type="button" aria-label="Close">${ic('i-x')}</button></div>
 <p class="sub">The mix fades out gently, then stops. <span id="tleft"></span></p><div class="opts" id="topts">${[15, 30, 45, 60, 90, 120].map(m => `<button class="btn" type="button" data-m="${m}">${m} min</button>`).join('')}<button class="btn" type="button" data-m="0">Off</button></div>
-<label class="chk"><input type="checkbox" id="fadein"><span>Fade in over 10 seconds when I press play</span></label><label class="chk" id="wakel"><input type="checkbox" id="wake"><span>Keep the screen on while playing</span></label></div></dialog>
+<p class="note">Only one timer runs at a time: this one or Focus.</p><label class="chk"><input type="checkbox" id="fadein"><span>Fade in over 10 seconds when I press play</span></label><label class="chk" id="wakel"><input type="checkbox" id="wake"><span>Keep the screen on while playing</span></label></div></dialog>
 <dialog id="dsaved" aria-labelledby="dst"><div class="sheet"><div class="sh"><h2 id="dst">Save &amp; mixes</h2><button class="ib" data-close type="button" aria-label="Close">${ic('i-x')}</button></div>
 <form class="save" id="saveform"><input id="savename" maxlength="40" placeholder="Name this mix" aria-label="Mix name" autocomplete="off"><button class="btn pri" type="submit">${ic('i-save')}Save current mix</button></form><ul class="list" id="slist"></ul></div></dialog>
+${focusMarkup(ic, esc)}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>`;
 const svgMark = `<symbol id="mark" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#1b1245"/><g stroke-linecap="round" stroke-width="3.2"><path d="M7 13v6" stroke="#9b8cff"/><path d="M11.800 9v14" stroke="#b6a6ff"/><path d="M16 5.500v21" stroke="#ffc2a8"/><path d="M20.200 10v12" stroke="#b6a6ff"/><path d="M25 14v4" stroke="#9b8cff"/></g></symbol>`;
 $('svg defs').insertAdjacentHTML('beforeend', svgMark);
@@ -75,18 +78,21 @@ function paint() {
   $$('#prow .pre').forEach(b => b.toggleAttribute('data-on', PRESETS[b.dataset.i].name === st.name));
   viz.set(m.items.map(i => ({ id: i.id, v: st.playing ? st.vol[i.id] : st.vol[i.id] * 0.3 })), isLight()); tickTimer(); media(); persist();
 }
-function syncEngine() {
-  if (!st.playing) return; for (const id of st.on) if (!engine.voices.has(id)) engine.addSound(id, st.vol[id], st.chr[id]); for (const id of [...engine.voices.keys()]) if (!st.on.has(id)) engine.removeSound(id);
+function syncEngine(xf = 0) {
+  if (!st.playing) return; for (const id of st.on) if (!engine.voices.has(id)) engine.addSound(id, st.vol[id], st.chr[id], xf || undefined); for (const id of [...engine.voices.keys()]) if (!st.on.has(id)) engine.removeSound(id, xf || undefined);
 }
+// The button follows intent at once (st.playing flips and paints before we wait on the audio context, whose resume() can stall until a
+// gesture), and again whenever the context changes state, so the pause icon shows whenever the mix is playing or about to.
 async function play() {
   if (!st.on.size) { applyMix(PRESETS[0], false); }
-  st.playing = true; engine.setMaster(st.master); engine.setMuted(st.muted); await engine.start(st.fadeIn ? 10 : 0.4); engine.resetFade(); syncEngine(); armTimer(); wakeLock(); paint();
+  st.playing = true; paint(); engine.setMaster(st.master); engine.setMuted(st.muted);
+  await Promise.race([engine.start(st.fadeIn ? 10 : 0.4), new Promise(r => setTimeout(r, 1200))]); engine.resetFade(); syncEngine(); armTimer(); focus && focus.onPlay(); wakeLock(); paint();
 }
 function pause() { st.playing = false; engine.pause(); paint(); }
 const toggle = () => (st.playing ? pause() : play());
-function applyMix(m, auto = true) {
+function applyMix(m, auto = true, xf = 0) {
   m = cleanMix(m); st.on = new Set(m.items.map(i => i.id)); m.items.forEach(i => { st.vol[i.id] = i.v; st.chr[i.id] = i.c; }); st.master = m.master; st.name = m.name;
-  syncEngine(); paint(); if (auto && !st.playing) play(); else if (st.playing) { engine.setMaster(st.master); for (const i of m.items) { engine.setVol(i.id, i.v); engine.setChar(i.id, i.c); } }
+  syncEngine(xf); paint(); if (auto && !st.playing) play(); else if (st.playing) { engine.setMaster(st.master); for (const i of m.items) { engine.setVol(i.id, i.v, xf || undefined); engine.setChar(i.id, i.c); } }
 }
 function setOn(id, on) {
   on ? st.on.add(id) : st.on.delete(id); st.name = ''; if (on && !st.playing) { play(); return; } syncEngine(); paint();
@@ -96,22 +102,29 @@ function armTimer() {
   if (!st.end || !st.playing) return; const left = remaining() / 1000, fade = Math.min(fadeSecFor(st.totalMin), left);
   if (left <= 0) return endTimer(); const g = timerGain(st.end, Date.now(), fade); if (left > fade) engine.ramp(1, 0, left - fade, fade); else engine.ramp(g, 0, 0, left);
 }
-function setTimer(min) { st.totalMin = min; st.end = min ? Date.now() + min * 60000 : 0; if (!min) engine.resetFade(); else armTimer(); store.set('opts', { fadeIn: st.fadeIn, wake: st.wake }); tickTimer(); toast(min ? `Sleep timer set for ${min} minutes` : 'Sleep timer off'); }
+async function setTimer(min) {
+  if (min && focus && focus.running()) { if (!await askConfirm('Pause Focus?', 'A focus session is running. Only one timer runs at a time, so setting the sleep timer pauses Focus.', 'Pause Focus and set the timer')) return; const was = st.playing; focus.pause(); if (was) await play(); }
+  st.totalMin = min; st.end = min ? Date.now() + min * 60000 : 0; if (!min) engine.resetFade(); else armTimer(); store.set('opts', { fadeIn: st.fadeIn, wake: st.wake }); tickTimer(); toast(min ? `Sleep timer set for ${min} minutes` : 'Sleep timer off');
+}
+function askConfirm(q, p, yes) {
+  return new Promise(res => { const dg = $('#dconfirm'); let r = false; $('#dcq').textContent = q; $('#dcp').textContent = p; $('#dcyes').textContent = yes; const done = () => { dg.removeEventListener('close', done); res(r); }; $('#dcyes').onclick = () => { r = true; dg.close(); }; $('#dcno').onclick = () => dg.close(); dg.addEventListener('close', done); dg.showModal(); });
+}
 function endTimer() { st.end = 0; st.totalMin = 0; if (st.playing) { pause(); toast('Sleep timer finished'); } setTimeout(() => engine.resetFade(), 800); }
 function tickTimer() {
   const left = remaining(); if (st.end && left <= 0) return endTimer();
-  const txt = st.end ? fmtClock(left) : ''; $('#timerl').textContent = st.end ? txt + ' left' : 'Sleep timer'; $('#mtime').textContent = txt ? txt + ' left' : (st.playing ? 'Playing' : 'Paused'); $('#timer').toggleAttribute('data-on', !!st.end);
+  const txt = st.end ? fmtClock(left) : ''; $('#timerl').textContent = st.end ? txt + ' left' : 'Sleep timer'; $('#mtime').textContent = focus && focus.active() ? focus.mediaInfo().title : txt ? txt + ' left' : (st.playing ? 'Playing' : 'Paused'); $('#timer').toggleAttribute('data-on', !!st.end);
   $('#tleft').textContent = st.end ? `${txt} left.` : ''; $$('#topts [data-m]').forEach(b => b.toggleAttribute('data-on', st.end ? +b.dataset.m === st.totalMin : b.dataset.m === '0'));
 }
 setInterval(tickTimer, 500); document.addEventListener('visibilitychange', () => { tickTimer(); if (!document.hidden) wakeLock(); });
 // ---- media session + wake lock ----
 function media() {
-  if (!('mediaSession' in navigator)) return; const m = mix(); try {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: st.name || summary(m) || 'TaoNoise', artist: 'TaoNoise', album: 'Mixed live in your browser', artwork: [{ src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] }); navigator.mediaSession.playbackState = st.playing ? 'playing' : 'paused';
+  if (!('mediaSession' in navigator)) return; const m = mix(), fi = focus && focus.mediaInfo(), nm = st.name || summary(m); try {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: fi ? fi.title : nm || 'TaoNoise', artist: fi ? fi.artist : 'TaoNoise', album: fi ? nm || 'Mixed live in your browser' : 'Mixed live in your browser', artwork: [{ src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] }); navigator.mediaSession.playbackState = st.playing ? 'playing' : 'paused';
   } catch (e) {}
 }
 if ('mediaSession' in navigator) { for (const [a, f] of [['play', () => !st.playing && play()], ['pause', () => st.playing && pause()], ['stop', () => st.playing && pause()]]) try { navigator.mediaSession.setActionHandler(a, f); } catch (e) {} }
-let lock = null; async function wakeLock() { if (!st.wake || !st.playing || !('wakeLock' in navigator)) return; try { if (!lock) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => (lock = null)); } } catch (e) {} }
+let lock = null; const wantLock = () => (st.wake && st.playing) || st.fwake; function wakeSync() { if (wantLock()) wakeLock(); else if (lock) lock.release(); }
+async function wakeLock() { if (!wantLock() || !('wakeLock' in navigator)) return; try { if (!lock) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => (lock = null)); } } catch (e) {} }
 // ---- saved mixes ----
 const saved = () => store.get('saved', []);
 function renderSaved() {
@@ -146,16 +159,20 @@ document.addEventListener('keydown', e => { if (e.code === 'Space' && e.target =
 // mini player appears when the main player scrolls out of view
 const mini = $('#mini'); new IntersectionObserver(([en]) => { const show = !en.isIntersecting; mini.classList.toggle('show', show); mini.setAttribute('aria-hidden', !show); $$('button,input', mini).forEach(x => (x.tabIndex = show ? 0 : -1)); }, { threshold: 0 }).observe($('.deck'));
 // ---- routing ----
+let baseT = document.title;
 function route() {
   const h = location.hash, m = decodeMix(h);
   if (m) { history.replaceState(null, '', location.pathname); applyMix(m, false); toast('Shared mix loaded. Press play.'); return; }
-  const p = h === '#/privacy'; $('#home').hidden = p; $('#privacy').hidden = !p; mini.style.display = p ? 'none' : ''; scrollTo(0, 0); document.title = p ? 'Privacy and policy - TaoNoise' : 'TaoNoise - mix your own white noise';
+  const p = h === '#/privacy'; $('#home').hidden = p; $('#privacy').hidden = !p; mini.style.display = p ? 'none' : ''; scrollTo(0, 0); baseT = p ? 'Privacy and policy - TaoNoise' : 'TaoNoise - mix your own white noise'; document.title = baseT; focus && focus.title();
 }
 addEventListener('hashchange', route);
 // ---- boot ----
+const focus = createFocus({ $, $$, store, st, engine, esc, PRESETS, saved, applyMix, play, pause, media, confirm: askConfirm, tone: p => viz.tone(p), toast, baseTitle: () => baseT, refresh: () => paint(),
+  wake: on => { st.fwake = on; wakeSync(); }, sleepOn: () => !!st.end, sleepLeft: () => fmtClock(remaining()), clearSleep: () => { st.end = 0; st.totalMin = 0; engine.resetFade(); tickTimer(); } });
+engine.onstate = () => paint();
 const th = store.get('theme', null); setTheme(th || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'), !th);
 const o = store.get('opts', {}); st.fadeIn = !!o.fadeIn; st.wake = !!o.wake; $('#fadein').checked = st.fadeIn; $('#wake').checked = st.wake;
 const last = store.get('last', null); if (last && last.items && last.items.length) { const m = cleanMix(last); st.on = new Set(m.items.map(i => i.id)); m.items.forEach(i => { st.vol[i.id] = i.v; st.chr[i.id] = i.c; }); st.master = m.master; st.name = m.name; }
-paint(); viz.start(); route();
+paint(); viz.start(); route(); if (focus.running()) toast('Focus is still running. Press play for the sound.');
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
-window.__tn = { engine, st };
+window.__tn = { engine, st, focus };
