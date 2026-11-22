@@ -4,7 +4,8 @@ A white-noise and ambient sound mixer that runs entirely in your browser. **33 s
 
 - Noise colours, rain (light, heavy, window, roof, tent), thunder, storm, wind, ocean, stream, waterfall, drips, underwater, campfire, fireplace, forest, crickets, birds, fan, train, airplane, cafe, typing, heartbeat, singing bowl, binaural drone, deep space.
 - Presets, "Surprise me", saved mixes (local storage), share links (the mix lives in the URL hash), sleep timer with a gentle fade-out, optional fade-in, master volume and mute, mini player, Media Session (lock-screen play/pause and title), optional screen wake lock, light and dark themes, works offline after the first load.
-- First load is about 25 KB gzip (one inlined HTML file).
+- **Focus (Pomodoro) timer** wired into the mixer: focus / short break / long break with a ring countdown, a different mix (or silence) per phase with smooth cross-fades, a synthesized soft chime, and a local-only history. See below.
+- First load is about 39 KB gzip (one inlined HTML file).
 
 ## How the sounds are made
 
@@ -29,6 +30,21 @@ Each sound is level-matched by `js/levels.js`, written by `npm run calibrate` fr
 
 The scenery (`js/viz.js`) blends a gradient toward the mix (rain steel blue, water deep blue, fire ember, forest green, space nebula) and draws rain streaks, ripples, fire glow, fog, stars and thunder flashes, driven by an `AnalyserNode` on the master output.
 
+## Focus timer
+
+Open **Focus** on the player card. Defaults are 25 min focus, 5 min short break, 15 min long break after every 4 focus blocks; every length, the cadence and "start the next phase automatically" are editable and remembered.
+
+- **Sound per phase.** For focus and for breaks separately: keep the current mix, switch to a preset or one of your saved mixes, or (breaks only) silence. A change of mix is an overlapping cross-fade (about 2.4 s); silence is a cosine fade (the same math as the sleep timer). Optional gentle fade-out over the last 8 s of a focus block.
+- **Chime.** A three-note bell (focus ends) or two soft notes (break ends), synthesized from sine partials, scheduled on the audio clock 2.5 s ahead so it lands on time even when page timers are throttled. Own volume slider, Test button, off switch. No ticking, no audio files.
+- **Timing is timestamps, not counters.** A running phase stores its end time (`Date.now()`); pause stores the remaining span. Nothing counts down, so a background tab, a sleeping phone or a reload cannot make it drift: state is persisted and resumes. A phase that ended while the page was closed is credited once and the timer waits (it never invents a pile of sessions).
+- **Everywhere you look.** The tab title shows `24:13 · Focus - TaoNoise`, Media Session shows the phase and minutes left on the lock screen, the Focus button and mini player show the time, the scene gets a calm cool wash in focus and a warm one in breaks.
+- **Tracking.** Dots for the current cycle, today's finished blocks and minutes, a day streak, the last 7 days, an optional task label per session. Kept in local storage only; "Clear history" erases it.
+- **Alerts.** Optional notification when a phase ends. Permission is asked only when you tick the box; it fires only while the page is alive (open tab or installed app, and the tab is not in front): a static page has no server to wake it. Optional screen wake lock during a session.
+- **One timer at a time.** Starting Focus while the sleep timer runs, or the sleep timer while Focus runs, asks first and turns the other off. Share links and saved mixes are unchanged; a phase mix is applied like any preset.
+- Keyboard: Space starts or pauses when the panel (the ring) has focus. Test hook: `window.__tn.focus.skew(ms)` moves the focus clock forward (used by `tools/e2e.mjs`).
+
+The rules (phases, cadence, remaining time, resume, history, validation) are the pure module `js/pomodoro.js`, covered by `test/pomodoro.test.mjs`.
+
 ## Run and build
 
 ```sh
@@ -42,12 +58,13 @@ npm run e2e         # real-browser checks; needs playwright-core and Chrome (see
 
 ## Privacy
 
-Nothing is sent anywhere. The page stores your last mix, saved mixes, theme and options in local storage, and an offline copy of the app in the browser cache. No cookies, analytics, third-party scripts or fonts. Share links keep the mix after the `#`, which browsers never send to a server. See the in-app `#/privacy` page.
+Nothing is sent anywhere. The page stores your last mix, saved mixes, theme, options and Focus timer data (settings, running phase, daily counts, task labels) in local storage, and an offline copy of the app in the browser cache. No cookies, analytics, third-party scripts or fonts. Share links keep the mix after the `#`, which browsers never send to a server. See the in-app `#/privacy` page.
 
 ## Limits
 
 - Browsers start audio only after a tap or click; the page never autoplays.
 - **iOS and background audio:** iOS suspends Web Audio when the page is backgrounded or the screen locks. TaoNoise routes its output through a media element (MediaStream) on iOS and sets Media Session metadata, which keeps playback going in most cases, but Apple does not guarantee it, and a phone call or Siri interrupts it (tap play again). Installing the page to the home screen helps.
+- The Focus chime and notification need the page alive: a closed tab or a frozen background page cannot ring (the time is still right when you return, and the phase is credited). Android Chrome may freeze a hidden tab that is not playing audio; keep the mix playing or the screen on (wake lock) for punctual alerts.
 - A low-power mode or aggressive battery saver can throttle timers; the scheduler looks 2.5 s ahead to ride out short stalls.
 - Many layered sounds with many events (heavy rain + fire + cafe) use noticeable CPU on old phones.
 - Recording to WAV is not included.
