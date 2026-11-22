@@ -1,0 +1,19 @@
+{
+  "name": "taonoise",
+  "version": "1.0.0",
+  "description": "A white-noise and ambient sound mixer that synthesizes every sound live in the browser with the Web Audio API.",
+  "repository": { "type": "git", "url": "git+https://github.com/mo0haned/taonoise.git" },
+  "homepage": "https://github.com/mo0haned/taonoise",
+  "bugs": { "url": "https://github.com/mo0haned/taonoise/issues" },
+  "license": "MIT",
+  "author": "Mohaned AbdElMonsef",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "node tools/build.mjs",
+    "serve": "node tools/serve.mjs 8767",
+    "calibrate": "node tools/calibrate.mjs",
+    "e2e": "node tools/e2e.mjs"
+  }
+}

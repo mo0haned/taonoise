@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>harness</title><script type="module">
+import { makeEnv, createVoice } from '/js/sounds.js';
+import { SOUNDS } from '/js/catalog.js';
+import { rms, peak, spectrum, bandPower, slope } from '/js/analysis.js';
+// Render one sound offline (mono mixdown of both channels) and return stats; levels = optional override
+window.renderSound = async (id, seconds = 20, char = null, sr = 44100) => {
+  const ctx = new OfflineAudioContext(2, sr * seconds, sr), dest = ctx.createGain(); dest.connect(ctx.destination);
+  const env = makeEnv(ctx, dest), vg = ctx.createGain(); vg.connect(dest);
+  const s = SOUNDS.find(x => x.id === id), v = createVoice(ctx, id, env, vg, char ?? s.dc); v.tick(0, seconds);
+  const b = await ctx.startRendering(), L = b.getChannelData(0), R = b.getChannelData(1), m = new Float32Array(L.length); for (let i = 0; i < m.length; i++) m[i] = (L[i] + R[i]) / 2;
+  const P = spectrum(m), bp = (a, z) => bandPower(P, sr, a, z), tot = bp(20, 20000);
+  // rms of 1 s windows to see steadiness
+  const win = []; for (let o = 0; o + sr <= m.length; o += sr) win.push(rms(m.subarray(o, o + sr)));
+  return { id, rms: rms(m), rmsL: rms(L), rmsR: rms(R), peak: Math.max(peak(L), peak(R)), slope: slope(m, sr), low: bp(20, 250) / tot, mid: bp(250, 2500) / tot, high: bp(2500, 20000) / tot, minWin: Math.min(...win), maxWin: Math.max(...win), nan: m.some(x => !Number.isFinite(x)) };
+};
+window.ready = true;
+</script>
